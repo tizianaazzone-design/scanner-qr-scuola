@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>Scanner QR scuola — verifica ingressi</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#12304b;background:#eaf1f8}*{box-sizing:border-box}body{margin:0;padding:18px}.wrap{max-width:540px;margin:auto;background:white;padding:22px;border-radius:18px}h1{font-size:1.55rem;margin:0 0 10px}.warning{padding:12px;background:#fff1d5;border-radius:10px;color:#694b00;font-weight:650}#reader{margin:18px auto;max-width:440px}#result{margin:15px 0;padding:18px;border-radius:12px;background:#e9eef5;overflow-wrap:anywhere}#result.success{background:#ddf9e6;color:#125a31}#result.error{background:#ffe4e4;color:#862323}button{background:#1769aa;color:white;border:0;border-radius:10px;padding:13px 16px;font-size:1rem;margin:6px 4px 6px 0}button:disabled{opacity:.5}#verify{background:#146c43}small{display:block;margin-top:10px;color:#566}
+</style>
+</head>
+<body><main class="wrap">
+<h1>🎟️ Scanner QR scuola</h1>
+<p class="warning">FASE DI TEST: usa soltanto biglietti di prova. La lettura del QR non registra l'ingresso; la conferma nella pagina scolastica modifica il registro.</p>
+<p>Avvia la fotocamera e inquadra il QR. Poi premi «Verifica ingresso» per aprire il controllo riservato. Al ritorno, premi «Continua» per leggere il successivo.</p>
+<div id="reader"></div>
+<div id="result" role="status" aria-live="polite">Fotocamera non ancora avviata.</div>
+<button id="start" type="button">📷 Avvia fotocamera</button>
+<button id="verify" type="button" disabled>✅ Verifica ingresso</button>
+<button id="next" type="button" disabled>Continua</button>
+<small>La pagina di verifica richiede l'account scolastico autorizzato. Non condividere i link di verifica: contengono il codice del biglietto.</small>
+</main>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+'use strict';
+const WEB_APP_URL='https://script.google.com/a/macros/calasanzio.edu.it/s/AKfycbx-NI0N-rUG0NuZFRhbrEY0M9wnMV9qXfDoPsmW81GcuyQnxlFgLoXMjk-4ntBGdhc/exec';
+const result=document.getElementById('result');
+const start=document.getElementById('start');
+const next=document.getElementById('next');
+const verify=document.getElementById('verify');
+const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+let camera=null,running=false,busy=false,scannedCode='';
+function show(message,type=''){result.textContent=message;result.className=type;}
+async function stopCamera(){if(camera){try{await camera.stop()}catch(e){console.warn(e)}running=false}}
+async function begin(){
+ if(!window.Html5Qrcode){show('Libreria di lettura non caricata. Controlla la connessione.','error');return}
+ start.disabled=true;next.disabled=true;verify.disabled=true;busy=false;scannedCode='';
+ show('Richiesta di accesso alla fotocamera…');
+ try{
+  if(!camera)camera=new Html5Qrcode('reader',{verbose:false});
+  await camera.start({facingMode:'environment'},
+   {fps:12,qrbox:(w,h)=>{const s=Math.min(270,Math.floor(Math.min(w,h)*.75));return {width:s,height:s}}},
+   async decoded=>{
+    if(busy)return;
+    busy=true;
+    const value=String(decoded||'').trim();
+    if(!uuidPattern.test(value)){
+     show('QR letto, ma non è un codice biglietto valido. Premi «Continua» per riprovare.','error');
+     next.disabled=false;
+     await stopCamera();return;
+    }
+    scannedCode=value;
+    show('QR letto correttamente. Premi «Verifica ingresso» per aprire il controllo scolastico.','success');
+    verify.disabled=false;next.disabled=false;
+    await stopCamera();
+   },()=>{});
+  running=true;
+  if(!busy)show('Fotocamera attiva: inquadra il QR.');
+ }catch(e){show('Impossibile avviare la fotocamera: '+(e?.message||String(e)),'error');start.disabled=false}
+}
+verify.addEventListener('click',()=>{
+ if(!uuidPattern.test(scannedCode))return;
+ const url=WEB_APP_URL+'?codice='+encodeURIComponent(scannedCode);
+ // Navigazione esplicita: non invia richieste di convalida dalla pagina pubblica.
+ window.location.assign(url);
+});
+start.addEventListener('click',begin);
+next.addEventListener('click',begin);
+window.addEventListener('pagehide',()=>{stopCamera()});
+</script></body></html>
